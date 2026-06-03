@@ -53,9 +53,7 @@ function ChatPage() {
     setInput("");
     setLoading(true);
     try {
-      const res = await chatFn({
-        data: { messages: next.map((m) => ({ role: m.role, content: m.content })) },
-      });
+      const res = await chatFn({ data: { message: text } });
       setMessages([...next, { role: "assistant", content: res.reply }]);
     } catch (err) {
       toast.error((err as Error).message);

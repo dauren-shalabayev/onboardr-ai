@@ -38,60 +38,48 @@ export const deleteDocument = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+const kbChatResponseSchema = z.object({
+  answer: z.string(),
+  sources: z
+    .array(
+      z.object({
+        document_id: z.string(),
+        score: z.number(),
+        excerpt: z.string(),
+      })
+    )
+    .optional(),
+});
+
 export const chatWithAi = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
-      messages: z
-        .array(
-          z.object({
-            role: z.enum(["user", "assistant"]),
-            content: z.string().min(1).max(10_000),
-          })
-        )
-        .min(1)
-        .max(50),
+      message: z.string().min(1).max(10_000),
     })
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY не настроен");
+    const baseUrl = process.env.KB_API_BASE_URL ?? "http://127.0.0.1:8083";
+    const kbId = process.env.KB_ID ?? "default";
+    const url = `${baseUrl.replace(/\/$/, "")}/v1/kb/${kbId}/chat`;
 
-    const { data: docs } = await supabaseAdmin
-      .from("documents")
-      .select("name, content")
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    const knowledge =
-      docs && docs.length > 0
-        ? docs
-            .map((d) => `### ${d.name}\n${d.content.slice(0, 8000)}`)
-            .join("\n\n---\n\n")
-        : "(база знаний пуста)";
-
-    const systemPrompt = `Ты — Boostra, AI-ассистент для онбординга сотрудников. Отвечай дружелюбно, кратко и по делу на русском языке. Используй базу знаний ниже как основной источник информации. Если ответа в базе нет — честно скажи об этом.\n\n# База знаний\n${knowledge}`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "system", content: systemPrompt }, ...data.messages],
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: data.message }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) throw new Error("Слишком много запросов, попробуйте позже");
-      if (response.status === 402) throw new Error("Закончились кредиты Lovable AI");
       const t = await response.text();
-      throw new Error(`AI error: ${response.status} ${t}`);
+      throw new Error(
+        response.status === 503 || response.status === 502
+          ? "Сервис базы знаний недоступен. Проверьте, что API запущен."
+          : `Ошибка KB API: ${response.status} ${t}`
+      );
     }
 
-    const json = await response.json();
-    const reply = json.choices?.[0]?.message?.content ?? "Не удалось получить ответ.";
-    return { reply };
+    const json = kbChatResponseSchema.parse(await response.json());
+    return {
+      reply: json.answer,
+      sources: json.sources ?? [],
+    };
   });
