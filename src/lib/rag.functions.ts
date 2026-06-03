@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export const listDocuments = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("documents")
     .select("id, name, size, created_at")
@@ -19,6 +19,7 @@ export const addDocument = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("documents").insert({
       name: data.name,
       content: data.content,
@@ -31,6 +32,7 @@ export const addDocument = createServerFn({ method: "POST" })
 export const deleteDocument = createServerFn({ method: "POST" })
   .inputValidator(z.object({ id: z.string().uuid() }))
   .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("documents").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -51,6 +53,7 @@ export const chatWithAi = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY не настроен");
 
