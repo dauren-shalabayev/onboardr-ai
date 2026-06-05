@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, FileText, Trash2, Loader2 } from "lucide-react";
+import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { listDocuments, addDocument, deleteDocument } from "@/lib/rag.functions";
+import { listDocuments, addDocument } from "@/lib/rag.functions";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -26,10 +25,21 @@ export const Route = createFileRoute("/admin")({
   ),
 });
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function AdminPage() {
   const listFn = useServerFn(listDocuments);
   const addFn = useServerFn(addDocument);
-  const delFn = useServerFn(deleteDocument);
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -39,27 +49,23 @@ function AdminPage() {
     queryFn: () => listFn(),
   });
 
-  const delMut = useMutation({
-    mutationFn: (id: string) => delFn({ data: { id } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["documents"] });
-      toast.success("Файл удалён");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        if (file.size > 500_000) {
-          toast.error(`${file.name}: слишком большой (макс 500 КБ)`);
+        const lower = file.name.toLowerCase();
+        if (!lower.endsWith(".pdf") && !lower.endsWith(".docx")) {
+          toast.error(`${file.name}: поддерживаются только .pdf и .docx`);
           continue;
         }
-        const content = await file.text();
-        await addFn({ data: { name: file.name, content } });
+        if (file.size > 10_000_000) {
+          toast.error(`${file.name}: слишком большой (макс 10 МБ)`);
+          continue;
+        }
+        const contentBase64 = await fileToBase64(file);
+        await addFn({ data: { name: file.name, contentBase64 } });
         toast.success(`Загружен: ${file.name}`);
       }
       qc.invalidateQueries({ queryKey: ["documents"] });
@@ -77,7 +83,7 @@ function AdminPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold">База знаний</h1>
           <p className="text-muted-foreground mt-2">
-            Загружайте текстовые файлы (.txt, .md), чтобы обучить AI-ассистента отвечать на их основе.
+            Загружайте документы (.pdf, .docx), чтобы обучить AI-ассистента отвечать на их основе.
           </p>
         </div>
 
@@ -89,7 +95,7 @@ function AdminPage() {
             ref={fileRef}
             type="file"
             multiple
-            accept=".txt,.md,.json,.csv"
+            accept=".pdf,.docx"
             className="hidden"
             onChange={onUpload}
           />
@@ -103,7 +109,7 @@ function AdminPage() {
               {uploading ? "Загрузка..." : "Нажмите, чтобы выбрать файлы"}
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              .txt, .md, .json, .csv до 500 КБ
+              .pdf, .docx до 10 МБ
             </div>
           </div>
         </Card>
@@ -126,18 +132,10 @@ function AdminPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{d.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {(d.size / 1024).toFixed(1)} КБ ·{" "}
+                      {d.chunk_count} фрагм. ·{" "}
                       {new Date(d.created_at).toLocaleString("ru-RU")}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => delMut.mutate(d.id)}
-                    disabled={delMut.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
                 </li>
               ))}
             </ul>

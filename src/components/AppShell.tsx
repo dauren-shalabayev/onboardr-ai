@@ -1,15 +1,16 @@
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
-import { MessageSquare, Database, LogOut, Sparkles } from "lucide-react";
+import { MessageSquare, Database, LogOut, Sparkles, Phone } from "lucide-react";
 import { logout } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { contacts } from "@/lib/onboarding-data";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const nav = [
-    { to: "/", label: "Чат", icon: MessageSquare },
+    { to: "/", label: "Спросить AI", icon: MessageSquare },
     { to: "/admin", label: "База знаний", icon: Database },
   ];
 
@@ -55,6 +56,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        <div className="p-4 border-t border-border space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <Phone className="h-3.5 w-3.5" />
+            Контакты
+          </div>
+          <div className="space-y-2">
+            {contacts.map((c) => (
+              <div key={c.role} className="text-xs">
+                <div className="font-medium">{c.role}</div>
+                <div className="text-muted-foreground">{c.name}</div>
+                <div className="text-muted-foreground/80">{c.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="p-3 border-t border-border">
           <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-2" />

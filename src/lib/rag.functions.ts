@@ -1,40 +1,77 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+function getKbConfig() {
+  const baseUrl = process.env.KB_API_BASE_URL ?? "http://127.0.0.1:8083";
+  const kbId = process.env.KB_ID ?? "default";
+  return { baseUrl: baseUrl.replace(/\/$/, ""), kbId };
+}
+
+function kbApiError(status: number, text: string) {
+  if (status === 503 || status === 502) {
+    return "Сервис базы знаний недоступен. Проверьте, что API запущен.";
+  }
+  try {
+    const json = JSON.parse(text) as { detail?: string | unknown };
+    if (typeof json.detail === "string") return json.detail;
+  } catch {
+    // ignore parse errors
+  }
+  return `Ошибка KB API: ${status} ${text}`;
+}
+
+const kbDocumentInfoSchema = z.object({
+  document_id: z.string(),
+  chunk_count: z.number(),
+  updated_at: z.string().nullable().optional(),
+});
+
 export const listDocuments = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("documents")
-    .select("id, name, size, created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const { baseUrl, kbId } = getKbConfig();
+  const response = await fetch(`${baseUrl}/v1/kb/${kbId}/documents`);
+
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error(kbApiError(response.status, t));
+  }
+
+  const docs = z.array(kbDocumentInfoSchema).parse(await response.json());
+  return docs.map((d) => ({
+    id: d.document_id,
+    name: d.document_id,
+    chunk_count: d.chunk_count,
+    created_at: d.updated_at ?? new Date().toISOString(),
+  }));
 });
 
 export const addDocument = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       name: z.string().min(1).max(500),
-      content: z.string().min(1).max(500_000),
+      contentBase64: z.string().min(1),
     })
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("documents").insert({
-      name: data.name,
-      content: data.content,
-      size: data.content.length,
-    });
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
+    const lower = data.name.toLowerCase();
+    if (!lower.endsWith(".pdf") && !lower.endsWith(".docx")) {
+      throw new Error("Поддерживаются только .pdf и .docx");
+    }
 
-export const deleteDocument = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ id: z.string().uuid() }))
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("documents").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
+    const bytes = Buffer.from(data.contentBase64, "base64");
+    const formData = new FormData();
+    formData.append("file", new Blob([bytes]), data.name);
+
+    const { baseUrl, kbId } = getKbConfig();
+    const response = await fetch(`${baseUrl}/v1/kb/${kbId}/documents`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      throw new Error(kbApiError(response.status, t));
+    }
+
     return { ok: true };
   });
 
@@ -58,11 +95,8 @@ export const chatWithAi = createServerFn({ method: "POST" })
     })
   )
   .handler(async ({ data }) => {
-    const baseUrl = process.env.KB_API_BASE_URL ?? "http://127.0.0.1:8083";
-    const kbId = process.env.KB_ID ?? "default";
-    const url = `${baseUrl.replace(/\/$/, "")}/v1/kb/${kbId}/chat`;
-
-    const response = await fetch(url, {
+    const { baseUrl, kbId } = getKbConfig();
+    const response = await fetch(`${baseUrl}/v1/kb/${kbId}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: data.message }),
@@ -70,11 +104,7 @@ export const chatWithAi = createServerFn({ method: "POST" })
 
     if (!response.ok) {
       const t = await response.text();
-      throw new Error(
-        response.status === 503 || response.status === 502
-          ? "Сервис базы знаний недоступен. Проверьте, что API запущен."
-          : `Ошибка KB API: ${response.status} ${t}`
-      );
+      throw new Error(kbApiError(response.status, t));
     }
 
     const json = kbChatResponseSchema.parse(await response.json());

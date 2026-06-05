@@ -3,17 +3,20 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Sparkles, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { chatWithAi } from "@/lib/rag.functions";
+import { quickQuestions } from "@/lib/onboarding-data";
+import { MessageContent } from "@/components/MessageContent";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Boostra — AI Онбординг" },
-      { name: "description", content: "AI-ассистент для онбординга сотрудников Boostra" },
+      { name: "description", content: "AI-ассистент по онбордингу" },
     ],
   }),
   component: () => (
@@ -33,7 +36,7 @@ function ChatPage() {
     {
       role: "assistant",
       content:
-        "Привет! Я Boostra — AI-ассистент по онбордингу. Задайте вопрос, и я отвечу на основе загруженной базы знаний.",
+        "Привет! Я помогу разобраться с первым днём в компании: программы, доступы, заявки. Выберите вопрос ниже или напишите свой.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -44,16 +47,15 @@ function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const send = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || loading) return;
-    const next: Msg[] = [...messages, { role: "user", content: text }];
+  const sendMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+    const next: Msg[] = [...messages, { role: "user", content: trimmed }];
     setMessages(next);
     setInput("");
     setLoading(true);
     try {
-      const res = await chatFn({ data: { message: text } });
+      const res = await chatFn({ data: { message: trimmed } });
       setMessages([...next, { role: "assistant", content: res.reply }]);
     } catch (err) {
       toast.error((err as Error).message);
@@ -63,17 +65,42 @@ function ChatPage() {
     }
   };
 
+  const send = (e: React.FormEvent) => {
+    e.preventDefault();
+    void sendMessage(input);
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-screen">
-      <header className="px-6 py-4 border-b border-border bg-card">
-        <h1 className="font-semibold">AI Чат</h1>
-        <p className="text-xs text-muted-foreground">
-          Отвечает на основе вашей базы знаний
-        </p>
-      </header>
+    <div className="flex-1 flex flex-col min-h-0">
+      <PageHeader
+        title="Спросить AI"
+        description="Ответы на основе базы знаний компании"
+      />
 
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl mx-auto p-6 space-y-6">
+          {messages.length === 1 && (
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-muted-foreground">
+                Популярные вопросы
+              </div>
+              <div className="flex flex-wrap gap-2">
+              {quickQuestions.map((q) => (
+                <Button
+                  key={q}
+                  variant="outline"
+                  size="sm"
+                  className="text-left h-auto py-2 px-3 whitespace-normal"
+                  onClick={() => void sendMessage(q)}
+                  disabled={loading}
+                >
+                  {q}
+                </Button>
+              ))}
+              </div>
+            </div>
+          )}
+
           {messages.map((m, i) => (
             <div
               key={i}
@@ -102,7 +129,7 @@ function ChatPage() {
                     : "bg-card border border-border"
                 }`}
               >
-                {m.content}
+                <MessageContent text={m.content} variant={m.role} />
               </div>
             </div>
           ))}
@@ -124,16 +151,35 @@ function ChatPage() {
       </div>
 
       <form onSubmit={send} className="border-t border-border bg-card p-4">
-        <div className="max-w-3xl mx-auto flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Спросите что-нибудь..."
-            disabled={loading}
-          />
-          <Button type="submit" disabled={loading || !input.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
+        <div className="max-w-3xl mx-auto space-y-2">
+          {messages.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {quickQuestions.map((q) => (
+                <Button
+                  key={q}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-7 text-muted-foreground"
+                  onClick={() => setInput(q)}
+                  disabled={loading}
+                >
+                  {q}
+                </Button>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Спросите про программы, доступы или заявки..."
+              disabled={loading}
+            />
+            <Button type="submit" disabled={loading || !input.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </form>
     </div>
