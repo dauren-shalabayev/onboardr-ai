@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
@@ -8,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Sparkles, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { chatWithAi } from "@/lib/rag.functions";
+import { chatWithAi } from "@/lib/rag.api";
 import { quickQuestions } from "@/lib/onboarding-data";
 import { MessageContent } from "@/components/MessageContent";
 
@@ -31,7 +30,6 @@ export const Route = createFileRoute("/")({
 type Msg = { role: "user" | "assistant"; content: string };
 
 function ChatPage() {
-  const chatFn = useServerFn(chatWithAi);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
@@ -55,7 +53,7 @@ function ChatPage() {
     setInput("");
     setLoading(true);
     try {
-      const res = await chatFn({ data: { message: trimmed } });
+      const res = await chatWithAi(trimmed);
       setMessages([...next, { role: "assistant", content: res.reply }]);
     } catch (err) {
       toast.error((err as Error).message);

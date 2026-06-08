@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +6,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { Card } from "@/components/ui/card";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { listDocuments, addDocument } from "@/lib/rag.functions";
+import { listDocuments, addDocument } from "@/lib/rag.api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -25,28 +24,14 @@ export const Route = createFileRoute("/admin")({
   ),
 });
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function AdminPage() {
-  const listFn = useServerFn(listDocuments);
-  const addFn = useServerFn(addDocument);
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ["documents"],
-    queryFn: () => listFn(),
+    queryFn: () => listDocuments(),
   });
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,8 +49,7 @@ function AdminPage() {
           toast.error(`${file.name}: слишком большой (макс 10 МБ)`);
           continue;
         }
-        const contentBase64 = await fileToBase64(file);
-        await addFn({ data: { name: file.name, contentBase64 } });
+        await addDocument(file);
         toast.success(`Загружен: ${file.name}`);
       }
       qc.invalidateQueries({ queryKey: ["documents"] });
