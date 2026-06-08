@@ -1,8 +1,15 @@
 import { z } from "zod";
 
 function getKbConfig() {
-  const baseUrl = import.meta.env.VITE_KB_API_BASE_URL ?? "http://127.0.0.1:8083";
+  const baseUrl = import.meta.env.VITE_API_URL;
   const kbId = import.meta.env.VITE_KB_ID ?? "default";
+
+  if (!baseUrl) {
+    throw new Error(
+      "VITE_API_URL не задан. Добавьте URL API в .env (локально) или в переменные окружения Vercel.",
+    );
+  }
+
   return { baseUrl: baseUrl.replace(/\/$/, ""), kbId };
 }
 
