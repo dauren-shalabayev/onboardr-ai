@@ -4,9 +4,10 @@ import { useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGate } from "@/components/AuthGate";
 import { Card } from "@/components/ui/card";
-import { Upload, FileText, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Upload, FileText, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { listDocuments, addDocument } from "@/lib/rag.api";
+import { listDocuments, addDocument, ingestConfluence } from "@/lib/rag.api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -28,6 +29,7 @@ function AdminPage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [confluenceLoading, setConfluenceLoading] = useState(false);
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ["documents"],
@@ -61,14 +63,41 @@ function AdminPage() {
     }
   };
 
+  const onConfluenceRefresh = async () => {
+    setConfluenceLoading(true);
+    try {
+      const res = await ingestConfluence();
+      toast.success(res.message);
+      qc.invalidateQueries({ queryKey: ["documents"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setConfluenceLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-4xl mx-auto p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">База знаний</h1>
-          <p className="text-muted-foreground mt-2">
-            Загружайте документы (.pdf, .docx), чтобы обучить AI-ассистента отвечать на их основе.
-          </p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">База знаний</h1>
+            <p className="text-muted-foreground mt-2">
+              Загружайте документы (.pdf, .docx) или обновите базу из Confluence.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void onConfluenceRefresh()}
+            disabled={confluenceLoading || uploading}
+          >
+            {confluenceLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Обновить с Confluence
+          </Button>
         </div>
 
         <Card

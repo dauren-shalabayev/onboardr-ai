@@ -73,6 +73,40 @@ export async function addDocument(file: File) {
   return { ok: true };
 }
 
+const confluenceIngestSchema = z
+  .object({
+    ingested: z.number().optional(),
+    documents: z.number().optional(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+
+export async function ingestConfluence() {
+  const { baseUrl, kbId } = getKbConfig();
+  const response = await fetch(`${baseUrl}/v1/kb/${kbId}/ingest/confluence`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error(kbApiError(response.status, t));
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return { message: "Загрузка из Confluence запущена" };
+  }
+
+  const json = confluenceIngestSchema.parse(JSON.parse(text));
+  const count = json.ingested ?? json.documents;
+  return {
+    message:
+      typeof count === "number"
+        ? `Обновлено документов: ${count}`
+        : (json.message ?? "Загрузка из Confluence запущена"),
+  };
+}
+
 const kbChatResponseSchema = z.object({
   answer: z.string(),
   sources: z
